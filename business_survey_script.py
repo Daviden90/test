@@ -1,4 +1,3 @@
-
 # Business-Survey
 # Python script to generate 40 construction company survey questions with email functionality
 

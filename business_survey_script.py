@@ -1,7 +1,10 @@
 # Business-Survey
-# Python script to generate 40 construction company survey questions with email functionality
+# Python script to run a construction company survey and email the results
 
+import os
+import re
 import smtplib
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -11,11 +14,12 @@ def display_header():
     print("#   Construction Company Success Survey   #")
     print("############################################")
     print("\nPlease enter the name of your company below:")
-    company_name = input("Company Name: ")
-    print(f"\nThank you, {company_name}! Please answer the questions below.")
+    company_name = input("Company Name: ").strip()
+    print(f"\nThank you, {company_name}! Please answer the {len(survey_questions)} questions below.")
     print("\nFor each question, where applicable, provide a score from 1 (Very Poor) to 10 (Excellent).")
+    return company_name
 
-# List of 40 tailored questions
+# List of tailored survey questions
 survey_questions = [
     "What is the mission statement of your company?",
     "What is the vision statement of your company?",
@@ -69,14 +73,31 @@ def display_survey():
         responses.append(f"{i}. {question}\nAnswer: {response}\n")
     return responses
 
+# Function to save survey results to a local text file so answers are never lost
+def save_responses(company_name, responses):
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", company_name).strip("_") or "company"
+    filename = f"survey_{safe_name}_{datetime.now():%Y%m%d_%H%M%S}.txt"
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(f"Company: {company_name}\n\n")
+        f.write("\n".join(responses))
+    print(f"\nSurvey results saved to {filename}")
+    return filename
+
 # Function to send survey results via email
-def send_email(responses, recipient_email):
-    sender_email = "your_email@example.com"  # Replace with your email
-    sender_password = "your_password"  # Replace with your email password
+def send_email(company_name, responses, recipient_email):
+    # Credentials come from environment variables so they are never stored in the code
+    sender_email = os.environ.get("SURVEY_SENDER_EMAIL")
+    sender_password = os.environ.get("SURVEY_SENDER_PASSWORD")
+    smtp_host = os.environ.get("SURVEY_SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SURVEY_SMTP_PORT", "587"))
+
+    if not sender_email or not sender_password:
+        print("Email not sent: set SURVEY_SENDER_EMAIL and SURVEY_SENDER_PASSWORD first.")
+        return False
 
     # Email content
-    subject = "Completed Construction Company Survey"
-    body = "\n".join(responses)
+    subject = f"Completed Construction Company Survey - {company_name}"
+    body = f"Company: {company_name}\n\n" + "\n".join(responses)
 
     # Create email message
     msg = MIMEMultipart()
@@ -87,20 +108,26 @@ def send_email(responses, recipient_email):
 
     # Send email
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
             server.starttls()
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, recipient_email, msg.as_string())
         print("Survey results sent successfully!")
+        return True
     except Exception as e:
         print(f"Failed to send email: {e}")
+        return False
 
 if __name__ == "__main__":
     # Display the survey header and questions
-    display_header()
+    company = display_header()
     answers = display_survey()
 
-    # Collect recipient email and send survey results
+    # Save a local copy first, then collect recipient email and send survey results
+    save_responses(company, answers)
     print("\nPlease enter the recipient's email to send the survey results:")
-    recipient = input("Recipient Email: ")
-    send_email(answers, recipient)
+    recipient = input("Recipient Email: ").strip()
+    if recipient:
+        send_email(company, answers, recipient)
+    else:
+        print("No recipient entered; email skipped.")
